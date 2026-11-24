@@ -26,13 +26,14 @@ def main():
     ap.add_argument("ip", nargs="?")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=6000)
-    ap.add_argument("--duration", type=int, default=60, help="0 = permanent")
+    ap.add_argument("--duration", type=int, default=0, help="0 = permanent (default)")
     ap.add_argument("--reason", default="manual block by admin")
     ap.add_argument("--config", default=os.path.join(HERE, "..", "config",
                                                      "config.json"))
     a = ap.parse_args()
     with open(a.config) as f:
-        token = json.load(f)["controller"]["auth_token"]
+        controller_cfg = json.load(f)["controller"]
+    token = controller_cfg.get("admin_token", controller_cfg["auth_token"])
 
     msg = {"type": a.cmd.upper(), "token": token}
     if a.cmd != "list":

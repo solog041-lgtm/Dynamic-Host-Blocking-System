@@ -21,7 +21,7 @@ Mininet topology for the Dynamic Host Blocking System.
 
 Run:
     sudo python3 topology/topo.py            # interactive CLI
-    sudo python3 topology/topo.py --test     # automated D1 test run
+    sudo python3 topology/topo.py --test     # automated Demo 2 validation run
 """
 import argparse
 import os
@@ -77,6 +77,29 @@ def run_tests(net):
         results.append((name, ok))
         info(f"\n*** [{'PASS' if ok else 'FAIL'}] {name} {detail}\n")
 
+    def capture_flow_tables(phase):
+        """Append complete switch flow-table snapshots to the project results."""
+        report_path = os.path.join(ROOT, "results", "flow_tables.txt")
+        os.makedirs(os.path.dirname(report_path), exist_ok=True)
+        with open(report_path, "a", encoding="utf-8") as report:
+            report.write(f"\n\n===== FLOW TABLE SNAPSHOT: {phase} ({time.ctime()}) =====\n")
+            for switch in ("s1", "s2", "s3"):
+                output = net[switch].cmd(
+                    f"ovs-ofctl -O OpenFlow10 dump-flows {switch}"
+                )
+                report.write(f"\n===== {switch} =====\n{output}\n")
+                info(f"\n===== {switch} flow table ({phase}) =====\n{output}\n")
+        return report_path
+
+    # Each automated run gets a fresh, unambiguous performance and flow report.
+    results_dir = os.path.join(ROOT, "results")
+    os.makedirs(results_dir, exist_ok=True)
+    for generated in ("performance.csv", "flow_tables.txt"):
+        try:
+            os.remove(os.path.join(results_dir, generated))
+        except FileNotFoundError:
+            pass
+
     info("\n*** T1: pingall (basic connectivity through the controller)\n")
     loss = net.pingAll(timeout=1)
     check("T1 pingall", loss == 0, f"loss={loss}%")
@@ -85,9 +108,10 @@ def run_tests(net):
     out = h1.cmd(f"{py} app/admin.py list --host 10.0.0.254")
     check("T2 server->controller channel", '"status": "OK"' in out, out.strip())
 
-    info("*** starting server on h1\n")
-    h1.cmd(f"{py} app/server.py --log /tmp/dhbs_server.log "
+    info("*** starting server and iperf3 measurement endpoint on h1\n")
+    h1.cmd(f"{py} app/server.py --log results/server.log "
            f"> /tmp/dhbs_server.out 2>&1 &")
+    h1.cmd("iperf3 -s -D -p 5201")
     time.sleep(1.5)
 
     info("*** T3: concurrent legitimate clients h2, h3, h5\n")
@@ -106,6 +130,11 @@ def run_tests(net):
     ok = all(output_has_success(h) for h in (h2, h3, h5))
     check("T3 concurrent clients", ok)
 
+    info("*** T3b: baseline latency and TCP throughput measurement\n")
+    metric_out = h2.cmd(f"{py} app/benchmark.py 10.0.0.1 --label baseline")
+    check("T3b latency and throughput recorded", "MEASUREMENTS_OK" in metric_out,
+          metric_out.strip())
+
     info("*** T4: attacker h4 brute-forces -> server reports -> SDN blocks\n")
     print(h4.cmd(f"{py} app/attacker.py 10.0.0.1 --mode bruteforce "
                  f"--attempts 6 --delay 0.3"))
@@ -117,13 +146,18 @@ def run_tests(net):
     check("T4c h4 isolated network-wide (h5 on same switch)",
           " 0% packet loss" not in r)
     for sw in ("s1", "s2", "s3"):
-        flows = net[sw].cmd(f"ovs-ofctl dump-flows {sw}")
+        flows = net[sw].cmd(f"ovs-ofctl -O OpenFlow10 dump-flows {sw}")
         check(f"T4d drop rule present on {sw}",
               "nw_src=10.0.0.4" in flows and "priority=65000" in flows)
+
+    capture_flow_tables("attacker_blocked")
 
     info("*** T5: legitimate client still works while h4 is blocked\n")
     out = h2.cmd(f"{py} app/client.py 10.0.0.1 --user alice --password alice123")
     check("T5 h2 unaffected", "SUCCESS" in out)
+    metric_out = h2.cmd(f"{py} app/benchmark.py 10.0.0.1 --label attacker_blocked")
+    check("T5b latency and throughput while attacker is blocked",
+          "MEASUREMENTS_OK" in metric_out, metric_out.strip())
 
     info("*** T6: admin unblock restores h4\n")
     h1.cmd(f"{py} app/admin.py unblock 10.0.0.4 --host 10.0.0.254")
@@ -131,7 +165,62 @@ def run_tests(net):
     r = h4.cmd("ping -c 2 -W 1 10.0.0.1")
     check("T6 h4 reachable after unblock", " 0% packet loss" in r)
 
+    # Start a fresh IDS process so the second attack scenario has a clean
+    # duplicate-alert cooldown while the controller's state remains intact.
     h1.cmd("pkill -f app/server.py")
+    h1.cmd(f"{py} app/server.py --log results/server.log "
+           f"> /tmp/dhbs_server.out 2>&1 &")
+    time.sleep(1)
+
+    info("*** T7: connection-flood detection and permanent block\n")
+    h4.cmd(f"{py} app/attacker.py 10.0.0.1 --mode flood --rate 50 "
+           f"--duration 3 > /tmp/dhbs_flood.out 2>&1 &")
+    time.sleep(4)
+    out = h1.cmd(f"{py} app/admin.py list --host 10.0.0.254")
+    check("T7a flood source appears in blocklist", "10.0.0.4" in out, out.strip())
+    check("T7b automatic block is permanent",
+          '"until": null' in out or '"until":null' in out, out.strip())
+
+    info("*** T8: detection and controller event logs exist\n")
+    # POX may be launched with its default event_log=events.csv from ~/pox,
+    # or via run_controller.sh which writes directly into project results/.
+    log_check = h1.cmd(
+        "test -s results/server.log && echo SERVER_LOG_OK; "
+        "EVENT_LOG=''; "
+        "if test -s results/events.csv; then EVENT_LOG=results/events.csv; "
+        "else EVENT_LOG=$(find /home /root -path '*/pox/events.csv' -type f "
+        "-size +0c 2>/dev/null | head -n 1); fi; "
+        "if test -n \"$EVENT_LOG\" && grep -q ',BLOCK,' \"$EVENT_LOG\"; "
+        "then echo CONTROLLER_LOG_OK; fi"
+    )
+    check("T8 detection logs recorded",
+          "SERVER_LOG_OK" in log_check and "CONTROLLER_LOG_OK" in log_check,
+          log_check.strip())
+
+    info("*** T9: admin authorisation required to restore access\n")
+    h1.cmd(f"{py} app/admin.py unblock 10.0.0.4 --host 10.0.0.254")
+    time.sleep(0.5)
+    r = h4.cmd("ping -c 2 -W 1 10.0.0.1")
+    check("T9 authorised admin unblock restores h4", " 0% packet loss" in r)
+
+    capture_flow_tables("after_admin_unblock")
+    flow_report = os.path.join(ROOT, "results", "flow_tables.txt")
+    try:
+        with open(flow_report, encoding="utf-8", errors="replace") as f:
+            flow_text = f.read()
+    except OSError:
+        flow_text = ""
+    flow_report_ok = (
+        all(f"===== {sw} =====" in flow_text for sw in ("s1", "s2", "s3"))
+        and "attacker_blocked" in flow_text
+        and "nw_src=10.0.0.4" in flow_text
+        and "priority=65000" in flow_text
+    )
+    check("T10 flow-table snapshots saved for all switches",
+          flow_report_ok, flow_report)
+
+    h1.cmd("pkill -f app/server.py")
+    h1.cmd("pkill -f 'iperf3 -s -p 5201'")
     passed = sum(ok for _, ok in results)
     info(f"\n*** SUMMARY: {passed}/{len(results)} checks passed\n")
     for name, ok in results:

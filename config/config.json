@@ -15,13 +15,20 @@
     "failed_auth_window_sec": 30,
     "max_conn_per_window": 20,
     "conn_window_sec": 10,
-    "block_duration_sec": 60,
-    "whitelist": ["10.0.0.1", "10.0.0.254", "127.0.0.1"]
+    "block_duration_sec": 0,
+    "whitelist": [
+      "10.0.0.1",
+      "10.0.0.254",
+      "127.0.0.1"
+    ],
+    "report_cooldown_sec": 30
   },
   "controller": {
     "control_host": "10.0.0.254",
     "control_port": 6000,
     "auth_token": "jackfruit-sdn-token",
-    "static_blocklist": []
+    "static_blocklist": [],
+    "admin_token": "change-this-admin-token",
+    "state_file": "results/blocklist.json"
   }
 }

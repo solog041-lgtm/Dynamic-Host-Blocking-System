@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.log
+results/events.csv
+results/server.log
+results/blocklist.json
+results/blocklist.json.tmp
+results/performance.csv
+.DS_Store

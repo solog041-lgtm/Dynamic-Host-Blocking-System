@@ -1,0 +1,72 @@
+
+
+===== FLOW TABLE SNAPSHOT: attacker_blocked (Wed Nov 18 17:27:12 2026) =====
+
+===== s1 =====
+ cookie=0x0, duration=11.482s, table=0, n_packets=6, n_bytes=454, priority=65000,ip,nw_src=10.0.0.4 actions=drop
+ cookie=0x0, duration=11.482s, table=0, n_packets=0, n_bytes=0, priority=65000,arp,arp_spa=10.0.0.4 actions=drop
+ cookie=0x0, duration=27.548s, table=0, n_packets=2555, n_bytes=6916919, idle_timeout=30, priority=100,in_port="s1-eth2",dl_dst=00:00:00:00:00:01 actions=output:"s1-eth1"
+ cookie=0x0, duration=27.542s, table=0, n_packets=2245, n_bytes=147521, idle_timeout=30, priority=100,in_port="s1-eth1",dl_dst=00:00:00:00:00:02 actions=output:"s1-eth2"
+ cookie=0x0, duration=27.436s, table=0, n_packets=16, n_bytes=1648, idle_timeout=30, priority=100,in_port="s1-eth1",dl_dst=00:00:00:00:00:03 actions=output:"s1-eth2"
+ cookie=0x0, duration=27.361s, table=0, n_packets=32, n_bytes=2563, idle_timeout=30, priority=100,in_port="s1-eth3",dl_dst=00:00:00:00:00:01 actions=output:"s1-eth1"
+ cookie=0x0, duration=27.354s, table=0, n_packets=19, n_bytes=1717, idle_timeout=30, priority=100,in_port="s1-eth1",dl_dst=00:00:00:00:00:04 actions=output:"s1-eth3"
+ cookie=0x0, duration=27.277s, table=0, n_packets=16, n_bytes=1649, idle_timeout=30, priority=100,in_port="s1-eth1",dl_dst=00:00:00:00:00:05 actions=output:"s1-eth3"
+ cookie=0x0, duration=27.155s, table=0, n_packets=8, n_bytes=560, idle_timeout=30, priority=100,in_port="s1-eth3",dl_dst=00:00:00:00:00:02 actions=output:"s1-eth2"
+ cookie=0x0, duration=27.143s, table=0, n_packets=6, n_bytes=476, idle_timeout=30, priority=100,in_port="s1-eth2",dl_dst=00:00:00:00:00:04 actions=output:"s1-eth3"
+ cookie=0x0, duration=27.097s, table=0, n_packets=6, n_bytes=476, idle_timeout=30, priority=100,in_port="s1-eth2",dl_dst=00:00:00:00:00:05 actions=output:"s1-eth3"
+ cookie=0x0, duration=27.031s, table=0, n_packets=8, n_bytes=560, idle_timeout=30, priority=100,in_port="s1-eth3",dl_dst=00:00:00:00:00:03 actions=output:"s1-eth2"
+ cookie=0x0, duration=26.695s, table=0, n_packets=17, n_bytes=1537, idle_timeout=30, priority=100,in_port="s1-eth4",dl_dst=00:00:00:00:00:01 actions=output:"s1-eth1"
+ cookie=0x0, duration=26.689s, table=0, n_packets=16, n_bytes=1279, idle_timeout=30, priority=100,in_port="s1-eth1",dl_dst=d6:a4:8a:91:0d:67 actions=output:"s1-eth4"
+
+
+===== s2 =====
+ cookie=0x0, duration=11.493s, table=0, n_packets=0, n_bytes=0, priority=65000,ip,nw_src=10.0.0.4 actions=drop
+ cookie=0x0, duration=11.493s, table=0, n_packets=0, n_bytes=0, priority=65000,arp,arp_spa=10.0.0.4 actions=drop
+ cookie=0x0, duration=27.563s, table=0, n_packets=2539, n_bytes=6915552, idle_timeout=30, priority=100,in_port="s2-eth2",dl_dst=00:00:00:00:00:01 actions=output:"s2-eth1"
+ cookie=0x0, duration=27.550s, table=0, n_packets=2253, n_bytes=148081, idle_timeout=30, priority=100,in_port="s2-eth1",dl_dst=00:00:00:00:00:02 actions=output:"s2-eth2"
+ cookie=0x0, duration=27.456s, table=0, n_packets=16, n_bytes=1367, idle_timeout=30, priority=100,in_port="s2-eth3",dl_dst=00:00:00:00:00:01 actions=output:"s2-eth1"
+ cookie=0x0, duration=27.444s, table=0, n_packets=24, n_bytes=2208, idle_timeout=30, priority=100,in_port="s2-eth1",dl_dst=00:00:00:00:00:03 actions=output:"s2-eth3"
+ cookie=0x0, duration=27.246s, table=0, n_packets=4, n_bytes=280, idle_timeout=30, priority=100,in_port="s2-eth3",dl_dst=00:00:00:00:00:02 actions=output:"s2-eth2"
+ cookie=0x0, duration=27.240s, table=0, n_packets=3, n_bytes=238, idle_timeout=30, priority=100,in_port="s2-eth2",dl_dst=00:00:00:00:00:03 actions=output:"s2-eth3"
+ cookie=0x0, duration=27.159s, table=0, n_packets=3, n_bytes=238, idle_timeout=30, priority=100,in_port="s2-eth2",dl_dst=00:00:00:00:00:04 actions=output:"s2-eth1"
+ cookie=0x0, duration=27.113s, table=0, n_packets=3, n_bytes=238, idle_timeout=30, priority=100,in_port="s2-eth2",dl_dst=00:00:00:00:00:05 actions=output:"s2-eth1"
+ cookie=0x0, duration=27.034s, table=0, n_packets=3, n_bytes=238, idle_timeout=30, priority=100,in_port="s2-eth3",dl_dst=00:00:00:00:00:04 actions=output:"s2-eth1"
+ cookie=0x0, duration=26.988s, table=0, n_packets=3, n_bytes=238, idle_timeout=30, priority=100,in_port="s2-eth3",dl_dst=00:00:00:00:00:05 actions=output:"s2-eth1"
+
+
+===== s3 =====
+ cookie=0x0, duration=11.507s, table=0, n_packets=16, n_bytes=1290, priority=65000,ip,nw_src=10.0.0.4 actions=drop
+ cookie=0x0, duration=11.507s, table=0, n_packets=0, n_bytes=0, priority=65000,arp,arp_spa=10.0.0.4 actions=drop
+ cookie=0x0, duration=27.390s, table=0, n_packets=16, n_bytes=1192, idle_timeout=30, priority=100,in_port="s3-eth2",dl_dst=00:00:00:00:00:01 actions=output:"s3-eth1"
+ cookie=0x0, duration=27.376s, table=0, n_packets=25, n_bytes=2193, idle_timeout=30, priority=100,in_port="s3-eth1",dl_dst=00:00:00:00:00:04 actions=output:"s3-eth2"
+ cookie=0x0, duration=27.310s, table=0, n_packets=16, n_bytes=1371, idle_timeout=30, priority=100,in_port="s3-eth3",dl_dst=00:00:00:00:00:01 actions=output:"s3-eth1"
+ cookie=0x0, duration=27.299s, table=0, n_packets=22, n_bytes=2125, idle_timeout=30, priority=100,in_port="s3-eth1",dl_dst=00:00:00:00:00:05 actions=output:"s3-eth3"
+ cookie=0x0, duration=27.184s, table=0, n_packets=4, n_bytes=280, idle_timeout=30, priority=100,in_port="s3-eth2",dl_dst=00:00:00:00:00:02 actions=output:"s3-eth1"
+ cookie=0x0, duration=27.136s, table=0, n_packets=4, n_bytes=280, idle_timeout=30, priority=100,in_port="s3-eth3",dl_dst=00:00:00:00:00:02 actions=output:"s3-eth1"
+ cookie=0x0, duration=27.059s, table=0, n_packets=4, n_bytes=280, idle_timeout=30, priority=100,in_port="s3-eth2",dl_dst=00:00:00:00:00:03 actions=output:"s3-eth1"
+ cookie=0x0, duration=27.012s, table=0, n_packets=4, n_bytes=280, idle_timeout=30, priority=100,in_port="s3-eth3",dl_dst=00:00:00:00:00:03 actions=output:"s3-eth1"
+ cookie=0x0, duration=26.915s, table=0, n_packets=4, n_bytes=280, idle_timeout=30, priority=100,in_port="s3-eth3",dl_dst=00:00:00:00:00:04 actions=output:"s3-eth2"
+ cookie=0x0, duration=26.909s, table=0, n_packets=3, n_bytes=238, idle_timeout=30, priority=100,in_port="s3-eth2",dl_dst=00:00:00:00:00:05 actions=output:"s3-eth3"
+
+
+
+===== FLOW TABLE SNAPSHOT: after_admin_unblock (Wed Nov 18 17:27:34 2026) =====
+
+===== s1 =====
+ cookie=0x0, duration=49.632s, table=0, n_packets=5095, n_bytes=13838239, idle_timeout=30, priority=100,in_port="s1-eth2",dl_dst=00:00:00:00:00:01 actions=output:"s1-eth1"
+ cookie=0x0, duration=49.626s, table=0, n_packets=4491, n_bytes=294925, idle_timeout=30, priority=100,in_port="s1-eth1",dl_dst=00:00:00:00:00:02 actions=output:"s1-eth2"
+ cookie=0x0, duration=49.445s, table=0, n_packets=86, n_bytes=6071, idle_timeout=30, priority=100,in_port="s1-eth3",dl_dst=00:00:00:00:00:01 actions=output:"s1-eth1"
+ cookie=0x0, duration=49.438s, table=0, n_packets=105, n_bytes=9211, idle_timeout=30, priority=100,in_port="s1-eth1",dl_dst=00:00:00:00:00:04 actions=output:"s1-eth3"
+ cookie=0x0, duration=48.779s, table=0, n_packets=37, n_bytes=3352, idle_timeout=30, priority=100,in_port="s1-eth4",dl_dst=00:00:00:00:00:01 actions=output:"s1-eth1"
+ cookie=0x0, duration=48.773s, table=0, n_packets=36, n_bytes=2940, idle_timeout=30, priority=100,in_port="s1-eth1",dl_dst=d6:a4:8a:91:0d:67 actions=output:"s1-eth4"
+
+
+===== s2 =====
+ cookie=0x0, duration=49.649s, table=0, n_packets=5079, n_bytes=13836872, idle_timeout=30, priority=100,in_port="s2-eth2",dl_dst=00:00:00:00:00:01 actions=output:"s2-eth1"
+ cookie=0x0, duration=49.636s, table=0, n_packets=4499, n_bytes=295485, idle_timeout=30, priority=100,in_port="s2-eth1",dl_dst=00:00:00:00:00:02 actions=output:"s2-eth2"
+
+
+===== s3 =====
+ cookie=0x0, duration=49.476s, table=0, n_packets=70, n_bytes=4700, idle_timeout=30, priority=100,in_port="s3-eth2",dl_dst=00:00:00:00:00:01 actions=output:"s3-eth1"
+ cookie=0x0, duration=49.462s, table=0, n_packets=111, n_bytes=9687, idle_timeout=30, priority=100,in_port="s3-eth1",dl_dst=00:00:00:00:00:04 actions=output:"s3-eth2"
+

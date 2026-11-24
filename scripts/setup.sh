@@ -12,6 +12,7 @@ fi
 # link our controller module into POX's ext/ folder
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 ln -sf "$REPO/controller/host_blocker.py" "$HOME/pox/ext/host_blocker.py"
+mkdir -p "$REPO/results"
 sudo mn --test pingall   # sanity check Mininet itself
 sudo mn -c
 echo "Setup done."

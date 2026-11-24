@@ -1,154 +1,259 @@
 # Dynamic Host Blocking System (DHBS)
-**CN Mini Project — SDN + Socket Programming (Jackfruit)**
+**Computer Networks Mini Project — SDN + TCP Socket Programming**
 
-A multi-client TCP application whose server detects misbehaving hosts
-(brute-force logins, connection floods) and asks an SDN controller, over a
-TCP control socket, to block them. The controller (POX, OpenFlow 1.0)
-instantly installs high-priority DROP rules on **every switch**, isolating
-the host network-wide; blocks expire automatically or can be lifted by an
-admin.
+## Demo 2 deliverable
 
----
+DHBS is a multi-client TCP application integrated with a POX SDN controller. The server detects suspicious hosts through failed-login and connection-rate thresholds. It reports the source IP to the controller, which installs high-priority OpenFlow DROP rules across the Mininet switches.
 
-## 1. Problem & objectives (D1: Problem Understanding & Architecture)
+**Demo 2 retains the complete Demo 1 system** and adds persistent permanent blocking, administrator-only recovery, event logging, flow-table inspection, performance measurement, and robustness validation.
 
-Traditional firewalls are configured statically on one box. In an SDN, the
-controller has a global view and can push rules to every switch, so the
-network itself can quarantine an attacker the moment the *application*
-notices abuse.
+## 1. Features
 
-| Objective | How it is met |
+### Retained from Demo 1
+
+- Multi-client TCP server with bounded client handling.
+- Newline-delimited JSON socket protocol: `AUTH`, `ECHO`, `TIME`, `STATS`, and `QUIT`.
+- Sliding-window IDS:
+  - Brute-force detection: 3 failed logins within 30 seconds.
+  - Connection-flood detection: more than 20 connections within 10 seconds.
+- Application-to-controller communication over TCP port `6000`.
+- POX OpenFlow 1.0 learning-switch behaviour.
+- Network-wide IPv4 and ARP source DROP rules.
+- Whitelist support.
+- Legitimate client, attacker, and admin CLI tools.
+- Admin operations to list, manually block, and unblock hosts.
+
+### Added for Demo 2
+
+| Addition | Implementation |
 |---|---|
-| Low-level TCP sockets, many clients | `app/server.py` – `socket` + one thread per client, capped by a semaphore |
-| Application-level protocol | newline-delimited JSON (`app/protocol.py`) with AUTH / ECHO / TIME / STATS / QUIT |
-| Detect malicious hosts | sliding-window IDS: ≥3 failed logins / 30 s, or >20 conns / 10 s |
-| App → SDN integration | server sends `BLOCK` over TCP to controller's control socket (port 6000) |
-| SDN enforcement | POX pushes priority-65000 drop flows (IPv4 + ARP, matched on source IP) to all switches, with hard timeout |
-| Recovery | auto-expiry after `block_duration_sec`, or `admin.py unblock` |
+| Explicit DROP-rule enforcement | Priority `65000` IPv4 and ARP DROP rules on every connected switch |
+| Detection and response logs | Server log plus timestamped controller `events.csv` |
+| Flow-table inspection | `app/flow_monitor.py` displays OVS flow tables for `s1`, `s2`, and `s3` |
+| Robustness scenarios | Concurrent clients, brute-force, connection flood, whitelist, controller reconnect/restart and recovery checks |
+| Latency measurement | ICMP round-trip average from `app/benchmark.py` |
+| Throughput measurement | TCP throughput using `iperf3` |
+| Permanent automatic bans | IDS-triggered blocks use duration `0` (no timeout) |
+| Admin-authorised recovery | Separate admin token required for `LIST` and `UNBLOCK` |
+| Persistent blocklist | `results/blocklist.json` restores active bans after controller restart |
 
 ## 2. Architecture
 
 ```mermaid
 flowchart LR
     subgraph Root namespace
-      POX["POX controller<br/>host_blocker.py<br/>• L2 learning switch<br/>• blocklist<br/>• control socket :6000"]
-      ADM["admin.py"]
+      POX["POX controller<br/>host_blocker.py<br/>Learning switch + blocklist<br/>Control socket :6000"]
+      ADM["Admin CLI"]
     end
     subgraph Mininet
-      S1((s1)) --- S2((s2))
+      H1["h1 · 10.0.0.1<br/>TCP server + IDS"] --- S1((s1))
+      S1 --- S2((s2))
       S1 --- S3((s3))
-      H1["h1 10.0.0.1<br/>TCP server + IDS"] --- S1
-      H2["h2 alice"] --- S2
-      H3["h3 bob"] --- S2
-      H4["h4 attacker"] --- S3
-      H5["h5 carol"] --- S3
-      RT["root-eth0 10.0.0.254"] --- S1
+      H2["h2 · 10.0.0.2<br/>Legitimate client"] --- S2
+      H3["h3 · 10.0.0.3<br/>Legitimate client"] --- S2
+      H4["h4 · 10.0.0.4<br/>Attacker simulator"] --- S3
+      H5["h5 · 10.0.0.5<br/>Legitimate client"] --- S3
+      RT["root-eth0 · 10.0.0.254"] --- S1
     end
-    POX -. OpenFlow :6633 .- S1 & S2 & S3
-    H1 -- "BLOCK {ip} (TCP :6000)" --> RT --> POX
-    ADM -- LIST/UNBLOCK --> POX
+    POX -. "OpenFlow 1.0 :6633" .- S1
+    POX -. "OpenFlow 1.0 :6633" .- S2
+    POX -. "OpenFlow 1.0 :6633" .- S3
+    H1 -- "BLOCK request :6000" --> RT --> POX
+    ADM -- "LIST / UNBLOCK" --> POX
 ```
 
-**Communication flow when an attack happens**
+### Detection-to-enforcement sequence
 
-1. h4 opens TCP connections to h1:5000 and sends wrong passwords.
-2. The server's IDS counts failures per source IP in a 30 s window.
-3. On the 3rd failure it sends `{"type":"BLOCK","ip":"10.0.0.4",...}` to
-   the controller at `10.0.0.254:6000` (the root-namespace interface).
-4. POX validates the token, installs `priority=65000, ip, nw_src=10.0.0.4,
-   actions=drop` (and the ARP equivalent) on s1, s2, s3, with
-   `hard_timeout=60`.
-5. All h4 traffic is now dropped at its first switch — even to h5 on the
-   same edge switch. Legitimate clients are unaffected.
-6. After 60 s the flows expire and the controller clears its table, or an
-   admin runs `unblock`.
+1. An attacker connects to the TCP server on `h1:5000`.
+2. The IDS tracks failed authentication attempts and new connections per source IP.
+3. When a threshold is crossed, the server logs the detection and sends a `BLOCK` request to the POX control socket.
+4. POX validates the application token and installs priority-`65000` DROP rules for IPv4 and ARP traffic sourced from the attacker IP on all connected switches.
+5. The controller records the action in `results/events.csv` and persists the blocklist in `results/blocklist.json`.
+6. The host remains blocked indefinitely, including after a controller restart.
+7. Only an administrator using the separate admin token can issue `UNBLOCK`.
 
-**Flow table design**
+### Flow-table policy
 
-| Priority | Match | Action | Timeout | Installed by |
-|---|---|---|---|---|
-| 65000 | `ip, nw_src=<blocked>` | drop | hard = block duration | BLOCK |
-| 65000 | `arp, arp_spa=<blocked>` | drop | hard = block duration | BLOCK |
-| 100 | `in_port, dl_dst` | output:port | idle 30 s | learning switch |
-| 0 | table miss | controller | – | default |
+| Priority | Match | Action | Timeout |
+|---:|---|---|---|
+| 65000 | IPv4 source = blocked host | DROP | Permanent for automatic bans |
+| 65000 | ARP source protocol address = blocked host | DROP | Permanent for automatic bans |
+| 100 | Learned destination MAC and ingress port | Forward to learned port | Idle 30 seconds |
+| 0 | Table miss | OpenFlow default handling | — |
 
-## 3. Repository layout
+## 3. Repository structure
 
+```text
+app/
+  protocol.py          JSON-line TCP protocol
+  server.py            TCP server, IDS and controller reporter
+  client.py            Legitimate TCP client
+  attacker.py          Brute-force and connection-flood simulator
+  admin.py             Admin-only list, block and unblock CLI
+  benchmark.py         ICMP latency and TCP throughput measurement
+  flow_monitor.py      Open vSwitch flow-table inspection
+controller/
+  host_blocker.py      POX learning switch, DROP rules and control socket
+config/
+  config.json          Server, IDS and controller settings
+topology/
+  topo.py              Mininet topology and Demo 2 validation suite
+scripts/
+  setup.sh             Dependency and POX setup
+  run_controller.sh    Start POX with event logging and persistent state
+results/
+  .gitkeep             Runtime logs, metrics and persistent blocklist
 ```
-app/protocol.py        JSON-line framing, LineReader, request helper
-app/server.py          multi-threaded TCP server + IDS + controller reporter
-app/client.py          legitimate client (scripted or interactive -i)
-app/attacker.py        brute-force / connection-flood simulator
-app/admin.py           CLI: list / block / unblock via control socket
-controller/host_blocker.py   POX component (switch + blocklist + control socket)
-topology/topo.py       Mininet topology + automated D1 test suite (--test)
-config/config.json     users, IDS thresholds, controller address, token
-scripts/setup.sh       installs Mininet, OVS, POX
-scripts/run_controller.sh
-results/               events.csv (controller event log) + test output
-```
 
-## 4. Setup
+## 4. Environment and setup
 
-Needs Ubuntu 20.04+ (VirtualBox/VMware VM or native install; WSL2 is unreliable
-for Open vSwitch).
+The supplied setup script targets Ubuntu 20.04+ on a VM or native Linux installation. It installs Mininet, Open vSwitch, POX prerequisites, Python and `iperf3`. Run from the project root:
 
 ```bash
-git clone <your-repo> dhbs && cd dhbs
 bash scripts/setup.sh
 ```
 
-## 5. Running
+The project uses POX with OpenFlow 1.0. The setup script clones POX into `~/pox` and links the project controller component into its `ext/` directory.
 
-**Terminal 1 – controller**
+## 5. Configuration
+
+Edit `config/config.json` before running:
+
+- `ids.max_failed_auth`: failed-login threshold (default `3`).
+- `ids.failed_auth_window_sec`: failed-login time window (default `30`).
+- `ids.max_conn_per_window`: connection threshold (default `20`).
+- `ids.conn_window_sec`: connection-rate window (default `10`).
+- `ids.block_duration_sec`: `0` means permanent automatic bans.
+- `ids.report_cooldown_sec`: suppresses duplicate IDS-to-controller requests for 30 seconds; it does not expire the ban.
+- `ids.whitelist`: source IPs excluded from automatic blocking.
+- `controller.auth_token`: application-to-controller credential; the app can request blocks only.
+- `controller.admin_token`: separate administrator credential for listing and unblocking.
+- `controller.state_file`: persistent blocklist path.
+
+**Before using outside a closed lab**, replace the example application passwords and both example tokens. Do not commit real credentials.
+
+## 6. Run the demo
+
+Open separate terminals from the project root.
+
+**Terminal 1 — start POX**
+
 ```bash
 bash scripts/run_controller.sh
 ```
 
-**Terminal 2 – automated D1 test run**
+**Terminal 2 — start Mininet**
+
 ```bash
-sudo python3 topology/topo.py --test  # exit status 0 only if all checks pass
+sudo python3 topology/topo.py
 ```
 
-**Or interactive demo** (`sudo python3 topology/topo.py`), then in the Mininet CLI:
+**Mininet CLI — start the TCP server and performance endpoint**
+
+```text
+mininet> h1 python3 app/server.py --log results/server.log &
+mininet> h1 iperf3 -s -D -p 5201
 ```
-mininet> pingall
-mininet> h1 python3 app/server.py --log /tmp/server.log &
+
+**Verify normal client operation**
+
+```text
 mininet> h2 python3 app/client.py 10.0.0.1 --user alice --password alice123
-mininet> h4 python3 app/attacker.py 10.0.0.1 --mode bruteforce
-mininet> h4 ping -c 3 10.0.0.1          # fails: blocked
-mininet> h5 ping -c 3 10.0.0.1          # works
-mininet> sh ovs-ofctl dump-flows s3     # see the drop rule
-mininet> h1 python3 app/admin.py list --host 10.0.0.254
-mininet> h1 python3 app/admin.py unblock 10.0.0.4 --host 10.0.0.254
-mininet> h4 ping -c 3 10.0.0.1          # works again
+mininet> h3 python3 app/client.py 10.0.0.1 --user bob --password bob123
+mininet> h5 python3 app/client.py 10.0.0.1 --user carol --password carol123
 ```
-(Run Mininet from the repo directory so the relative `app/` paths work.)
 
-## 6. Test cases (D1)
+**Measure latency and throughput**
 
-| ID | Test | Expected |
+Run from a legitimate Mininet host:
+
+```text
+mininet> h2 python3 app/benchmark.py 10.0.0.1 --label baseline
+```
+
+The script records average ICMP latency and TCP throughput in `results/performance.csv`. `iperf3` must be installed on the Fedora host before running the automated test (`sudo dnf install iperf3 -y`).
+
+**Simulate brute-force detection**
+
+```text
+mininet> h4 python3 app/attacker.py 10.0.0.1 --mode bruteforce
+```
+
+**Inspect the flow tables**
+
+```text
+mininet> sh python3 app/flow_monitor.py
+```
+
+The automated test also saves full snapshots from all three switches to `results/flow_tables.txt`, including a snapshot while the attacker is blocked and another after administrator unblock.
+
+Or inspect one switch directly:
+
+```text
+mininet> sh ovs-ofctl -O OpenFlow10 dump-flows s3
+```
+
+Look for priority-`65000` rules matching the attacker's source IP with no output action (DROP).
+
+**Inspect the controller blocklist and logs**
+
+```text
+mininet> h1 python3 app/admin.py list --host 10.0.0.254
+mininet> sh tail -n 20 results/events.csv
+mininet> sh tail -n 20 results/server.log
+```
+
+**Unblock an attacker (administrator only)**
+
+```text
+mininet> h1 python3 app/admin.py unblock 10.0.0.4 --host 10.0.0.254
+```
+
+After unblocking, the attacker can communicate again. An application token cannot perform `LIST` or `UNBLOCK`.
+
+## 7. Demo 2 validation scenarios
+
+Run the automated suite from a separate terminal while POX is running:
+
+```bash
+sudo python3 topology/topo.py --test
+```
+
+| Test | Scenario | Expected result |
 |---|---|---|
-| T1 | `pingall` | 0 % loss – controller's learning switch works |
-| T2 | h1 → controller `LIST` via 10.0.0.254:6000 | `status: OK` – app↔SDN channel up |
-| T3 | h2, h3, h5 run clients concurrently | all print `SUCCESS` with RTTs |
-| T4a | h4 brute-forces | 10.0.0.4 appears in controller blocklist |
-| T4b | h4 ping h1 | 100 % loss |
-| T4c | h4 ping h5 (same switch s3) | 100 % loss – network-wide isolation |
-| T4d | `dump-flows` on s1, s2, s3 | priority-65000 drop rule for 10.0.0.4 on each |
-| T5 | h2 client while h4 blocked | `SUCCESS` – no collateral damage |
-| T6 | admin unblock, h4 ping h1 | 0 % loss – recovery works |
+| T1 | Basic `pingall` | All hosts initially communicate |
+| T2 | Server-to-controller control channel | Admin `LIST` request returns `OK` |
+| T3 | Concurrent legitimate clients | All clients authenticate and complete ECHO requests |
+| T3b | Baseline performance | Latency and throughput are recorded |
+| T4 | Brute-force attack | IDS detects h4 and requests a block |
+| T4a–T4c | Blocklist and network isolation | h4 cannot reach h1 or h5 |
+| T4d | Flow-table validation | DROP rule appears on s1, s2 and s3 |
+| T5 | Legitimate traffic during an attack block | h2 remains operational |
+| T5b | Performance during attacker block | Legitimate latency and throughput are recorded |
+| T6 | Administrator unblock | h4 connectivity is restored |
+| T7 | Connection-flood attack | Connection-rate IDS detects and blocks h4 |
+| T7b | Permanent-ban validation | Blocklist entry has no expiry (`until: null`) |
+| T8 | Event logging | Server and controller logs are present |
+| T9 | Admin recovery | Authorised admin unblocks h4 and connectivity returns |
+| T10 | Flow-table report | Full flow tables for s1, s2 and s3 are saved in `results/flow_tables.txt`; the blocked-phase snapshot contains the attacker's priority-65000 DROP rule |
 
-D1 validation note: syntax checks alone do not prove the Mininet/POX integration
-works. Run the test suite in the specified Ubuntu environment and retain the
-actual output. The test runner exits with status 1 if any check fails. Malformed
-or oversized client messages are rejected and the connection is closed; the
-controller response is counted as a successful block only when it returns
-`status: OK`.
+### Additional robustness checks for the live demonstration
 
-## 7. Roadmap to D2
+- **Controller restart:** restart POX while Mininet is active; confirm that the blocklist is restored from `results/blocklist.json` and DROP rules are applied when switches reconnect.
+- **Switch reconnect:** disconnect and reconnect a switch; confirm that active block entries are re-applied.
+- **Unauthorised recovery:** attempt `UNBLOCK` with the application token; the controller must reject it.
+- **Whitelist:** trigger a detection condition from a whitelisted address in a controlled test; it must be logged but not automatically blocked.
+- **Legitimate traffic:** verify that non-blocked clients continue to authenticate and exchange data while the attacker is isolated.
 
-- Controller-side detection from flow stats (port scan / SYN flood) independent of the app
-- Escalating block durations for repeat offenders; rate-limit (meter/queue) before full block
-- Performance: block latency (from `events.csv` vs server log), legit-client RTT/throughput (iperf3) under attack, with vs without DHBS (static L2 switch baseline)
-- Challenging scenarios: distributed attackers, controller restart, link failure
+The automated suite covers the main traffic, detection, flow, performance and recovery path. The additional robustness checks above are live/manual checks and should only be reported as passed after they have actually been run.
+
+## 8. Output files
+
+| File | Purpose |
+|---|---|
+| `results/server.log` | IDS detections and application responses |
+| `results/events.csv` | Timestamped controller events: block, unblock, expiry and rejected control requests |
+| `results/blocklist.json` | Persistent active blocklist |
+| `results/performance.csv` | Latency and throughput measurements |
+
+Runtime result files are generated during execution and are not pre-populated with fabricated measurements.

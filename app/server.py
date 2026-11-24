@@ -50,7 +50,10 @@ class IDS:
     def is_reported(self, ip):
         with self.lock:
             t = self.reported.get(ip)
-            return t is not None and time.time() - t < self.cfg["block_duration_sec"]
+            if t is None:
+                return False
+            cooldown = int(self.cfg.get("report_cooldown_sec", 30))
+            return time.time() - t < cooldown
 
     def clear_report(self, ip):
         """Allow a later detection to retry if controller blocking failed."""
@@ -84,13 +87,15 @@ class IDS:
             log.warning("IDS: %s tripped (%s) but is whitelisted", ip, reason)
             return
         with self.lock:
-            if ip in self.reported and \
-                    time.time() - self.reported[ip] < self.cfg["block_duration_sec"]:
-                return  # already reported, don't spam the controller
+            previous = self.reported.get(ip)
+            cooldown = int(self.cfg.get("report_cooldown_sec", 30))
+            if previous is not None and time.time() - previous < cooldown:
+                return  # suppress duplicate controller requests briefly
             self.reported[ip] = time.time()
             self.failed.pop(ip, None)
             self.conns.pop(ip, None)
-        log.warning("IDS ALERT %s -> %s", ip, reason)
+        log.warning("IDS_DETECTION ip=%s reason=%s action=REQUEST_PERMANENT_BLOCK",
+                    ip, reason)
         # report in background so a slow controller never stalls a client thread
         threading.Thread(target=self.reporter, args=(ip, reason),
                          daemon=True).start()
@@ -117,10 +122,13 @@ class AppServer:
                                 self.ccfg["control_port"], msg)
                 log.info("controller reply for %s: %s", ip, reply)
                 if reply.get("status") == "OK":
+                    log.warning("IDS_RESPONSE ip=%s controller_status=OK "
+                                "action=DROP_RULES_INSTALLED", ip)
                     with self.lock:
                         self.blocked_reports += 1
                     return
-                log.error("controller rejected block request for %s: %s", ip, reply)
+                log.error("IDS_RESPONSE ip=%s controller_status=REJECTED reply=%s",
+                          ip, reply)
                 break
             except (OSError, ProtocolError) as e:
                 log.error("controller unreachable (try %d/3): %s", attempt, e)
@@ -159,6 +167,7 @@ class AppServer:
                 if t == "AUTH":
                     u, p = msg.get("user"), msg.get("password")
                     if self.scfg["users"].get(u) == p:
+                        self.ids.clear_report(ip)
                         user = u
                         send_msg(conn, {"status": "OK", "type": t,
                                         "msg": f"welcome {u}"})
@@ -230,10 +239,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config/config.json")
     ap.add_argument("--controller", help="override controller IP")
-    ap.add_argument("--log", default=None, help="also log to this file")
+    ap.add_argument("--log", default="results/server.log",
+                    help="also log to this file (default: results/server.log)")
     a = ap.parse_args()
     handlers = [logging.StreamHandler()]
     if a.log:
+        os.makedirs(os.path.dirname(os.path.abspath(a.log)), exist_ok=True)
         handlers.append(logging.FileHandler(a.log))
     logging.basicConfig(level=logging.INFO, handlers=handlers,
                         format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
